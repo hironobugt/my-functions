@@ -34,12 +34,28 @@ export interface AnalyticsService {
    * Log usage limit events
    */
   logUsageLimitEvent(userId: string, limitType: 'daily' | 'monthly', exceeded: boolean): Promise<void>;
+
+  /**
+   * Log session end events
+   */
+  logSessionEnd(userId: string, reason: 'user_initiated' | 'timeout' | 'error'): Promise<void>;
+
+  /**
+   * Log fallback events when user input is not recognized
+   */
+  logFallbackEvent(userId: string, context: FallbackContext): Promise<void>;
 }
 
 export interface ErrorContext {
   userId?: string;
   intentName?: string;
   errorType: string;
+  timestamp: Date;
+  additionalData?: Record<string, any>;
+}
+
+export interface FallbackContext {
+  intentName?: string;
   timestamp: Date;
   additionalData?: Record<string, any>;
 }
