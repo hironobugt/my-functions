@@ -24,6 +24,14 @@ export interface LLMService {
      * Get appropriate model configuration for user tier
      */
     getModelConfig(userTier: UserTier): ModelConfig;
+    /**
+     * Calculate total token count for a conversation context
+     */
+    calculateContextTokenCount(context: ConversationContext): number;
+    /**
+     * Check if context needs truncation for given user tier
+     */
+    shouldTruncateContext(context: ConversationContext, userTier: UserTier, additionalPromptTokens?: number): boolean;
 }
 export interface ModelConfig {
     model: string;

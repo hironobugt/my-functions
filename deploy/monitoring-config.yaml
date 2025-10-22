@@ -1,0 +1,322 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudWatch monitoring resources for Alexa LLM Chat skill'
+
+Parameters:
+  SkillName:
+    Type: String
+    Default: 'alexa-llm-chat'
+    Description: 'Name of the Alexa skill'
+  
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+  
+  LambdaFunctionName:
+    Type: String
+    Description: 'Name of the Lambda function to monitor'
+  
+  ConversationContextTableName:
+    Type: String
+    Description: 'Name of the conversation context DynamoDB table'
+  
+  SubscriptionStatusTableName:
+    Type: String
+    Description: 'Name of the subscription status DynamoDB table'
+
+Resources:
+  # CloudWatch Dashboard
+  AlexaLLMChatDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub '${SkillName}-${Environment}-dashboard'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${LambdaFunctionName}" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ ".", "Duration", ".", "." ],
+                  [ ".", "Throttles", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Function Metrics",
+                "period": 300,
+                "stat": "Sum"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${ConversationContextTableName}" ],
+                  [ ".", "ConsumedWriteCapacityUnits", ".", "." ],
+                  [ ".", "ConsumedReadCapacityUnits", "TableName", "${SubscriptionStatusTableName}" ],
+                  [ ".", "ConsumedWriteCapacityUnits", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Capacity Metrics",
+                "period": 300,
+                "stat": "Sum"
+              }
+            },
+            {
+              "type": "log",
+              "x": 0,
+              "y": 6,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '/aws/lambda/${LambdaFunctionName}'\n| fields @timestamp, level, message, context.userId, context.intentName, context.userTier\n| filter level = \"ERROR\"\n| sort @timestamp desc\n| limit 100",
+                "region": "${AWS::Region}",
+                "title": "Recent Errors",
+                "view": "table"
+              }
+            },
+            {
+              "type": "log",
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '/aws/lambda/${LambdaFunctionName}'\n| fields @timestamp, context.userTier\n| filter message like /LLM response generated successfully/\n| stats count() by context.userTier\n| sort count desc",
+                "region": "${AWS::Region}",
+                "title": "Conversations by User Tier",
+                "view": "pie"
+              }
+            },
+            {
+              "type": "log",
+              "x": 12,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '/aws/lambda/${LambdaFunctionName}'\n| fields @timestamp, context.intentName\n| filter context.intentName exists\n| stats count() by context.intentName\n| sort count desc",
+                "region": "${AWS::Region}",
+                "title": "Intent Usage Distribution",
+                "view": "pie"
+              }
+            },
+            {
+              "type": "log",
+              "x": 0,
+              "y": 18,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '/aws/lambda/${LambdaFunctionName}'\n| fields @timestamp, performance.duration, performance.operation\n| filter performance.operation exists\n| stats avg(performance.duration), max(performance.duration), min(performance.duration) by performance.operation\n| sort avg desc",
+                "region": "${AWS::Region}",
+                "title": "Performance Metrics by Operation",
+                "view": "table"
+              }
+            }
+          ]
+        }
+
+  # Error Rate Alarm
+  HighErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${SkillName}-${Environment}-high-error-rate'
+      AlarmDescription: 'Alarm when Lambda function error rate is high'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaFunctionName
+      AlarmActions:
+        - !Ref ErrorNotificationTopic
+
+  # Duration Alarm
+  HighDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${SkillName}-${Environment}-high-duration'
+      AlarmDescription: 'Alarm when Lambda function duration is high'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 6000  # 6 seconds (Alexa has 8 second timeout)
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaFunctionName
+      AlarmActions:
+        - !Ref PerformanceNotificationTopic
+
+  # Throttle Alarm
+  ThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${SkillName}-${Environment}-throttles'
+      AlarmDescription: 'Alarm when Lambda function is being throttled'
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaFunctionName
+      AlarmActions:
+        - !Ref PerformanceNotificationTopic
+
+  # DynamoDB Read Throttle Alarm
+  DynamoDBReadThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${SkillName}-${Environment}-dynamodb-read-throttles'
+      AlarmDescription: 'Alarm when DynamoDB read operations are being throttled'
+      MetricName: ReadThrottledEvents
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !Ref ConversationContextTableName
+      AlarmActions:
+        - !Ref PerformanceNotificationTopic
+
+  # DynamoDB Write Throttle Alarm
+  DynamoDBWriteThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${SkillName}-${Environment}-dynamodb-write-throttles'
+      AlarmDescription: 'Alarm when DynamoDB write operations are being throttled'
+      MetricName: WriteThrottledEvents
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !Ref ConversationContextTableName
+      AlarmActions:
+        - !Ref PerformanceNotificationTopic
+
+  # SNS Topics for Notifications
+  ErrorNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${SkillName}-${Environment}-error-notifications'
+      DisplayName: !Sub '${SkillName} ${Environment} Error Notifications'
+
+  PerformanceNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${SkillName}-${Environment}-performance-notifications'
+      DisplayName: !Sub '${SkillName} ${Environment} Performance Notifications'
+
+  # Custom Metrics for Business Intelligence
+  BusinessMetricsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${LambdaFunctionName}/business-metrics'
+      RetentionInDays: 30
+
+  # Metric Filters for Business Intelligence
+  ConversationCountMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${LambdaFunctionName}'
+      FilterPattern: '[timestamp, requestId, level="INFO", message="LLM response generated successfully", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub '${SkillName}/${Environment}/Business'
+          MetricName: 'ConversationCount'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  FreeUserConversationMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${LambdaFunctionName}'
+      FilterPattern: '[timestamp, requestId, level="INFO", message="LLM response generated successfully", context, userTier="free", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub '${SkillName}/${Environment}/Business'
+          MetricName: 'FreeUserConversations'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  PremiumUserConversationMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${LambdaFunctionName}'
+      FilterPattern: '[timestamp, requestId, level="INFO", message="LLM response generated successfully", context, userTier="premium", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub '${SkillName}/${Environment}/Business'
+          MetricName: 'PremiumUserConversations'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  SubscriptionPurchaseMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${LambdaFunctionName}'
+      FilterPattern: '[timestamp, requestId, level="INFO", message="Subscription purchase completed", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub '${SkillName}/${Environment}/Business'
+          MetricName: 'SubscriptionPurchases'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  UsageLimitReachedMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${LambdaFunctionName}'
+      FilterPattern: '[timestamp, requestId, level="WARN", message="Free user usage limit reached", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub '${SkillName}/${Environment}/Business'
+          MetricName: 'UsageLimitReached'
+          MetricValue: '1'
+          DefaultValue: 0
+
+Outputs:
+  DashboardURL:
+    Description: 'URL to the CloudWatch Dashboard'
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${SkillName}-${Environment}-dashboard'
+    Export:
+      Name: !Sub '${AWS::StackName}-DashboardURL'
+
+  ErrorNotificationTopicArn:
+    Description: 'ARN of the error notification SNS topic'
+    Value: !Ref ErrorNotificationTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-ErrorNotificationTopicArn'
+
+  PerformanceNotificationTopicArn:
+    Description: 'ARN of the performance notification SNS topic'
+    Value: !Ref PerformanceNotificationTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-PerformanceNotificationTopicArn'

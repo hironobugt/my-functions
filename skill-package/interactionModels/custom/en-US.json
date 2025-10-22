@@ -1,0 +1,197 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "ai chat",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": [
+            "help",
+            "what can you do",
+            "how does this work",
+            "what can I ask"
+          ]
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "ChatIntent",
+          "slots": [
+            {
+              "name": "Question",
+              "type": "AMAZON.SearchQuery",
+              "samples": [
+                "what is {Question}",
+                "tell me about {Question}",
+                "explain {Question}",
+                "{Question}"
+              ]
+            }
+          ],
+          "samples": [
+            "ask {Question}",
+            "what is {Question}",
+            "tell me about {Question}",
+            "explain {Question}",
+            "help me with {Question}",
+            "I want to know about {Question}",
+            "can you explain {Question}",
+            "what do you think about {Question}",
+            "how does {Question} work",
+            "why is {Question}",
+            "when is {Question}",
+            "where is {Question}",
+            "who is {Question}",
+            "{Question}",
+            "my question is {Question}",
+            "I have a question about {Question}",
+            "could you help me understand {Question}",
+            "I'm curious about {Question}",
+            "please tell me {Question}",
+            "I'd like to learn about {Question}",
+            "what can you tell me about {Question}",
+            "give me information about {Question}",
+            "I need help with {Question}",
+            "can you discuss {Question}",
+            "let's talk about {Question}",
+            "I want to discuss {Question}"
+          ]
+        },
+        {
+          "name": "SubscriptionIntent",
+          "samples": [
+            "what are premium features",
+            "tell me about premium",
+            "how do I upgrade",
+            "what does premium include",
+            "I want to upgrade",
+            "buy premium",
+            "purchase premium",
+            "subscribe",
+            "get premium",
+            "unlock premium features",
+            "what's the difference between free and premium",
+            "premium benefits",
+            "subscription options",
+            "pricing",
+            "how much does it cost",
+            "what do I get with premium",
+            "upgrade my account",
+            "premium subscription",
+            "unlimited conversations",
+            "remove limits"
+          ]
+        },
+        {
+          "name": "UsageStatusIntent",
+          "samples": [
+            "how many conversations do I have left",
+            "what's my usage",
+            "check my limits",
+            "how many questions can I ask",
+            "am I premium",
+            "what's my subscription status",
+            "check my account",
+            "usage remaining",
+            "conversations left",
+            "daily limit"
+          ]
+        },
+        {
+          "name": "NewConversationIntent",
+          "samples": [
+            "start a new conversation",
+            "new chat",
+            "clear history",
+            "fresh start",
+            "reset conversation",
+            "start over",
+            "new session",
+            "begin again"
+          ]
+        },
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": [
+            "yes",
+            "yeah",
+            "sure",
+            "ok",
+            "okay",
+            "yep",
+            "that's right",
+            "correct",
+            "affirmative",
+            "absolutely",
+            "definitely",
+            "of course",
+            "certainly"
+          ]
+        },
+        {
+          "name": "AMAZON.NoIntent",
+          "samples": [
+            "no",
+            "nope",
+            "not now",
+            "maybe later",
+            "not interested",
+            "no thanks",
+            "not really",
+            "negative"
+          ]
+        }
+      ],
+      "types": []
+    },
+    "dialog": {
+      "intents": [
+        {
+          "name": "ChatIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "Question",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.Question"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "prompts": [
+      {
+        "id": "Elicit.Slot.Question",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What would you like to ask me?"
+          },
+          {
+            "type": "PlainText",
+            "value": "What's your question?"
+          },
+          {
+            "type": "PlainText",
+            "value": "I'm ready to help. What would you like to know?"
+          }
+        ]
+      }
+    ]
+  }
+}

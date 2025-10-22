@@ -1,0 +1,91 @@
+{
+  "version": "1.0",
+  "type": "SUBSCRIPTION",
+  "referenceName": "premium_subscription",
+  "publishingInformation": {
+    "locales": {
+      "en-US": {
+        "name": "AI Chat Premium",
+        "summary": "Unlimited conversations with advanced AI models",
+        "description": "Upgrade to AI Chat Premium for unlimited daily conversations and access to more powerful AI language models. Premium subscribers get:\n\n• Unlimited conversations per day\n• Access to GPT-4 and other advanced models\n• Longer conversation memory\n• Priority response times\n• No daily usage limits\n\nPerfect for students, professionals, and AI enthusiasts who want unrestricted access to cutting-edge AI conversation capabilities.",
+        "examplePhrases": [
+          "Buy AI Chat Premium",
+          "What are the premium features?",
+          "Upgrade to premium"
+        ],
+        "keywords": [
+          "premium",
+          "unlimited",
+          "subscription",
+          "upgrade",
+          "advanced AI",
+          "GPT-4"
+        ],
+        "customProductPrompts": {
+          "purchasePrompt": "AI Chat Premium gives you unlimited conversations with advanced AI models. Would you like to subscribe for $4.99 per month?",
+          "boughtCardDescription": "You now have AI Chat Premium! Enjoy unlimited conversations with advanced AI models."
+        }
+      }
+    },
+    "distributionCountries": [
+      "US",
+      "CA",
+      "GB",
+      "AU"
+    ],
+    "pricing": {
+      "amazon.com": [
+        {
+          "price": 4.99,
+          "currency": "USD",
+          "subscriptionTerms": {
+            "subscriptionTerm": "MONTHLY"
+          }
+        }
+      ],
+      "amazon.ca": [
+        {
+          "price": 6.99,
+          "currency": "CAD",
+          "subscriptionTerms": {
+            "subscriptionTerm": "MONTHLY"
+          }
+        }
+      ],
+      "amazon.co.uk": [
+        {
+          "price": 3.99,
+          "currency": "GBP",
+          "subscriptionTerms": {
+            "subscriptionTerm": "MONTHLY"
+          }
+        }
+      ],
+      "amazon.com.au": [
+        {
+          "price": 7.99,
+          "currency": "AUD",
+          "subscriptionTerms": {
+            "subscriptionTerm": "MONTHLY"
+          }
+        }
+      ]
+    },
+    "taxInformation": {
+      "category": "SOFTWARE"
+    }
+  },
+  "privacyAndCompliance": {
+    "locales": {
+      "en-US": {
+        "privacyPolicyUrl": "https://your-website.com/privacy-policy"
+      }
+    }
+  },
+  "testingInstructions": "To test the premium subscription:\n1. Ask 'What are premium features?'\n2. Say 'I want to upgrade' or 'Buy premium'\n3. Follow the purchase flow\n4. After purchase, test unlimited usage\n5. Verify access to advanced AI models",
+  "purchasableState": "PURCHASABLE",
+  "subscriptionInformation": {
+    "subscriptionPaymentFrequency": "MONTHLY",
+    "subscriptionTrialPeriodDays": 7
+  }
+}

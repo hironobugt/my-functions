@@ -1,0 +1,502 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  alexa-llm-chat
+  
+  Alexa skill for LLM chat using OpenRouter API with subscription management
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: nodejs18.x
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name for resource naming and configuration
+  
+  OpenRouterApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenRouter API key for LLM service
+  
+  OpenRouterBaseUrl:
+    Type: String
+    Default: https://openrouter.ai/api/v1
+    Description: OpenRouter API base URL
+  
+  FreeUserDailyLimit:
+    Type: Number
+    Default: 5
+    Description: Daily conversation limit for free users
+  
+  FreeUserModel:
+    Type: String
+    Default: openai/gpt-3.5-turbo
+    Description: LLM model for free users
+  
+  PremiumUserModel:
+    Type: String
+    Default: openai/gpt-4
+    Description: LLM model for premium users
+  
+  MaxContextTokens:
+    Type: Number
+    Default: 4000
+    Description: Maximum context tokens for conversations
+  
+  ResponseTimeoutMs:
+    Type: Number
+    Default: 7000
+    Description: Response timeout in milliseconds
+
+Resources:
+  AlexaLLMChatFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alexa-llm-chat-${Environment}'
+      CodeUri: dist/
+      Handler: index.handler
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          OPENROUTER_API_KEY: !Ref OpenRouterApiKey
+          OPENROUTER_BASE_URL: !Ref OpenRouterBaseUrl
+          FREE_USER_DAILY_LIMIT: !Ref FreeUserDailyLimit
+          FREE_USER_MODEL: !Ref FreeUserModel
+          PREMIUM_USER_MODEL: !Ref PremiumUserModel
+          MAX_CONTEXT_TOKENS: !Ref MaxContextTokens
+          RESPONSE_TIMEOUT_MS: !Ref ResponseTimeoutMs
+          CONVERSATION_CONTEXT_TABLE: !Ref ConversationContextTable
+          SUBSCRIPTION_STATUS_TABLE: !Ref SubscriptionStatusTable
+          ANALYTICS_TABLE: !Ref AnalyticsTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConversationContextTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SubscriptionStatusTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnalyticsTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
+                - cloudwatch:GetMetricStatistics
+              Resource: '*'
+      Events:
+        AlexaSkillEvent:
+          Type: AlexaSkill
+          Properties:
+            SkillId: !Ref AlexaSkillId
+
+  ConversationContextTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'alexa-llm-chat-conversation-context-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: sessionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: sessionId
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: alexa-llm-chat
+
+  SubscriptionStatusTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'alexa-llm-chat-subscription-status-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: alexa-llm-chat
+
+  AnalyticsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'alexa-llm-chat-analytics-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+        - AttributeName: eventType
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: EventTypeIndex
+          KeySchema:
+            - AttributeName: eventType
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: alexa-llm-chat
+
+  # CloudWatch Log Group for Lambda function
+  AlexaLLMChatLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/alexa-llm-chat-${Environment}'
+      RetentionInDays: 14
+
+  # Parameter for Alexa Skill ID (to be set after skill creation)
+  AlexaSkillId:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/alexa-llm-chat/${Environment}/skill-id'
+      Type: String
+      Value: 'PLACEHOLDER_SKILL_ID'
+      Description: 'Alexa Skill ID for the LLM Chat skill'
+
+  # CloudWatch Dashboard for monitoring
+  AlexaLLMChatDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub 'alexa-llm-chat-${Environment}'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${AlexaLLMChatFunction}" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ ".", "Duration", ".", "." ],
+                  [ ".", "Throttles", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Function Metrics",
+                "period": 300,
+                "stat": "Sum"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${ConversationContextTable}" ],
+                  [ ".", "ConsumedWriteCapacityUnits", ".", "." ],
+                  [ ".", "ConsumedReadCapacityUnits", "TableName", "${SubscriptionStatusTable}" ],
+                  [ ".", "ConsumedWriteCapacityUnits", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Capacity Metrics",
+                "period": 300,
+                "stat": "Sum"
+              }
+            },
+            {
+              "type": "log",
+              "x": 0,
+              "y": 6,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '${AlexaLLMChatLogGroup}'\n| fields @timestamp, level, message, context.userId, context.intentName, context.userTier\n| filter level = \"ERROR\"\n| sort @timestamp desc\n| limit 100",
+                "region": "${AWS::Region}",
+                "title": "Recent Errors",
+                "view": "table"
+              }
+            },
+            {
+              "type": "log",
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '${AlexaLLMChatLogGroup}'\n| fields @timestamp, context.userTier\n| filter message like /LLM response generated successfully/\n| stats count() by context.userTier\n| sort count desc",
+                "region": "${AWS::Region}",
+                "title": "Conversations by User Tier",
+                "view": "pie"
+              }
+            },
+            {
+              "type": "log",
+              "x": 12,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '${AlexaLLMChatLogGroup}'\n| fields @timestamp, context.intentName\n| filter context.intentName exists\n| stats count() by context.intentName\n| sort count desc",
+                "region": "${AWS::Region}",
+                "title": "Intent Usage Distribution",
+                "view": "pie"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 18,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AlexaLLMChat/Business", "ConversationCount", "Environment", "${Environment}" ],
+                  [ ".", "SubscriptionPurchases", ".", "." ],
+                  [ ".", "UsageLimitReached", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Business Metrics",
+                "period": 3600,
+                "stat": "Sum"
+              }
+            }
+          ]
+        }
+
+  # CloudWatch Alarms
+  HighErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'alexa-llm-chat-${Environment}-high-error-rate'
+      AlarmDescription: 'Alarm when Lambda function error rate is high'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AlexaLLMChatFunction
+      AlarmActions:
+        - !Ref ErrorNotificationTopic
+
+  HighDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'alexa-llm-chat-${Environment}-high-duration'
+      AlarmDescription: 'Alarm when Lambda function duration is high'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 6000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AlexaLLMChatFunction
+      AlarmActions:
+        - !Ref PerformanceNotificationTopic
+
+  ThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'alexa-llm-chat-${Environment}-throttles'
+      AlarmDescription: 'Alarm when Lambda function is being throttled'
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AlexaLLMChatFunction
+      AlarmActions:
+        - !Ref PerformanceNotificationTopic
+
+  # SNS Topics for Notifications
+  ErrorNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'alexa-llm-chat-${Environment}-error-notifications'
+      DisplayName: !Sub 'Alexa LLM Chat ${Environment} Error Notifications'
+
+  PerformanceNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'alexa-llm-chat-${Environment}-performance-notifications'
+      DisplayName: !Sub 'Alexa LLM Chat ${Environment} Performance Notifications'
+
+  # Metric Filters for Business Intelligence
+  ConversationCountMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AlexaLLMChatLogGroup
+      FilterPattern: '[timestamp, requestId, level="INFO", message="LLM response generated successfully", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub 'AlexaLLMChat/${Environment}/Business'
+          MetricName: 'ConversationCount'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  FreeUserConversationMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AlexaLLMChatLogGroup
+      FilterPattern: '[timestamp, requestId, level="INFO", message="LLM response generated successfully", context, userTier="free", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub 'AlexaLLMChat/${Environment}/Business'
+          MetricName: 'FreeUserConversations'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  PremiumUserConversationMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AlexaLLMChatLogGroup
+      FilterPattern: '[timestamp, requestId, level="INFO", message="LLM response generated successfully", context, userTier="premium", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub 'AlexaLLMChat/${Environment}/Business'
+          MetricName: 'PremiumUserConversations'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  SubscriptionPurchaseMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AlexaLLMChatLogGroup
+      FilterPattern: '[timestamp, requestId, level="INFO", message="Subscription purchase completed", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub 'AlexaLLMChat/${Environment}/Business'
+          MetricName: 'SubscriptionPurchases'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  UsageLimitReachedMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AlexaLLMChatLogGroup
+      FilterPattern: '[timestamp, requestId, level="WARN", message="Free user usage limit reached", ...]'
+      MetricTransformations:
+        - MetricNamespace: !Sub 'AlexaLLMChat/${Environment}/Business'
+          MetricName: 'UsageLimitReached'
+          MetricValue: '1'
+          DefaultValue: 0
+
+Outputs:
+  AlexaLLMChatFunction:
+    Description: "Alexa LLM Chat Lambda Function ARN"
+    Value: !GetAtt AlexaLLMChatFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AlexaLLMChatFunction'
+
+  AlexaLLMChatFunctionIamRole:
+    Description: "Implicit IAM Role created for Alexa LLM Chat function"
+    Value: !GetAtt AlexaLLMChatFunctionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AlexaLLMChatFunctionRole'
+
+  ConversationContextTable:
+    Description: "DynamoDB table for conversation context"
+    Value: !Ref ConversationContextTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ConversationContextTable'
+
+  SubscriptionStatusTable:
+    Description: "DynamoDB table for subscription status"
+    Value: !Ref SubscriptionStatusTable
+    Export:
+      Name: !Sub '${AWS::StackName}-SubscriptionStatusTable'
+
+  AnalyticsTable:
+    Description: "DynamoDB table for analytics"
+    Value: !Ref AnalyticsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-AnalyticsTable'
+
+  LambdaEndpoint:
+    Description: "Lambda function endpoint for Alexa skill configuration"
+    Value: !GetAtt AlexaLLMChatFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaEndpoint'
+
+  DashboardURL:
+    Description: "URL to the CloudWatch Dashboard"
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=alexa-llm-chat-${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-DashboardURL'
+
+  ErrorNotificationTopicArn:
+    Description: "ARN of the error notification SNS topic"
+    Value: !Ref ErrorNotificationTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-ErrorNotificationTopicArn'
+
+  PerformanceNotificationTopicArn:
+    Description: "ARN of the performance notification SNS topic"
+    Value: !Ref PerformanceNotificationTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-PerformanceNotificationTopicArn'

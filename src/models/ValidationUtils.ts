@@ -158,6 +158,18 @@ export function validateAppConfig(config: any): config is AppConfig {
     throw new ValidationError('responseTimeoutMs must be a positive number', 'responseTimeoutMs');
   }
 
+  if (!config.conversationContextTable || typeof config.conversationContextTable !== 'string') {
+    throw new ValidationError('conversationContextTable must be a non-empty string', 'conversationContextTable');
+  }
+
+  if (!config.subscriptionStatusTable || typeof config.subscriptionStatusTable !== 'string') {
+    throw new ValidationError('subscriptionStatusTable must be a non-empty string', 'subscriptionStatusTable');
+  }
+
+  if (!config.analyticsTable || typeof config.analyticsTable !== 'string') {
+    throw new ValidationError('analyticsTable must be a non-empty string', 'analyticsTable');
+  }
+
   return true;
 }
 

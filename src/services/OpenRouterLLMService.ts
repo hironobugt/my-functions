@@ -2,6 +2,7 @@ import { LLMService, ModelConfig } from '../interfaces/LLMService';
 import { ConversationContext, ChatMessage } from '../models/ConversationContext';
 import { UserTier } from '../models/SubscriptionStatus';
 import { AppConfig, getConfig } from '../models/AppConfig';
+import { logger, LogContext } from './LoggingService';
 
 /**
  * OpenRouter API response interface
@@ -110,6 +111,17 @@ export class OpenRouterLLMService implements LLMService {
     context: ConversationContext | null,
     userTier: UserTier
   ): Promise<string> {
+    const timer = logger.startTimer('OPENROUTER_GENERATE_RESPONSE');
+    const logContext: LogContext = {
+      userId: context?.userId,
+      sessionId: context?.sessionId,
+      userTier,
+      promptLength: prompt.length,
+      contextMessageCount: context?.messages?.length || 0
+    };
+
+    logger.info('Starting LLM response generation', logContext);
+
     try {
       const modelConfig = this.getModelConfig(userTier);
       const messages = this.formatMessagesForApi(prompt, context, userTier);
@@ -122,6 +134,13 @@ export class OpenRouterLLMService implements LLMService {
         top_p: modelConfig.topP,
       };
 
+      logger.debug('Making OpenRouter API request', {
+        ...logContext,
+        model: modelConfig.model,
+        messageCount: messages.length,
+        maxTokens: modelConfig.maxTokens
+      });
+
       const response = await this.makeApiRequest('/chat/completions', requestBody);
       
       if (!response.choices || response.choices.length === 0) {
@@ -133,8 +152,31 @@ export class OpenRouterLLMService implements LLMService {
         throw new LLMServiceError('Invalid response format from API');
       }
 
-      return assistantMessage.content.trim();
+      const responseContent = assistantMessage.content.trim();
+      const metric = timer(true, {
+        ...logContext,
+        responseLength: responseContent.length,
+        tokensUsed: response.usage?.total_tokens,
+        finishReason: response.choices[0].finish_reason
+      });
+
+      logger.info('LLM response generated successfully', {
+        ...logContext,
+        responseLength: responseContent.length,
+        tokensUsed: response.usage?.total_tokens,
+        duration: metric.duration
+      });
+
+      return responseContent;
     } catch (error) {
+      timer(false, logContext);
+      
+      logger.logErrorMetric({
+        error: error instanceof Error ? error : new Error(String(error)),
+        operation: 'OPENROUTER_GENERATE_RESPONSE',
+        context: logContext
+      });
+
       if (error instanceof LLMServiceError) {
         throw error;
       }
@@ -151,6 +193,10 @@ export class OpenRouterLLMService implements LLMService {
    * Validate API configuration and connectivity
    */
   async validateApiConfiguration(): Promise<boolean> {
+    const timer = logger.startTimer('OPENROUTER_VALIDATE_CONFIG');
+    
+    logger.info('Validating OpenRouter API configuration');
+
     try {
       // Test with a simple request to validate API key and connectivity
       const testMessages = [
@@ -165,9 +211,16 @@ export class OpenRouterLLMService implements LLMService {
       };
 
       await this.makeApiRequest('/chat/completions', requestBody);
+      
+      timer(true);
+      logger.info('API configuration validation successful');
       return true;
     } catch (error) {
-      console.error('API configuration validation failed:', error);
+      timer(false);
+      logger.logErrorMetric({
+        error: error instanceof Error ? error : new Error(String(error)),
+        operation: 'OPENROUTER_VALIDATE_CONFIG'
+      });
       return false;
     }
   }
@@ -271,6 +324,10 @@ export class OpenRouterLLMService implements LLMService {
    * Check if API is currently available
    */
   async isApiAvailable(): Promise<boolean> {
+    const timer = logger.startTimer('OPENROUTER_AVAILABILITY_CHECK');
+    
+    logger.debug('Checking OpenRouter API availability');
+
     try {
       const response = await fetch(`${this.baseUrl}/models`, {
         method: 'GET',
@@ -281,9 +338,25 @@ export class OpenRouterLLMService implements LLMService {
         signal: AbortSignal.timeout(5000), // 5 second timeout for availability check
       });
 
-      return response.ok;
+      const isAvailable = response.ok;
+      timer(isAvailable);
+      
+      if (isAvailable) {
+        logger.debug('OpenRouter API is available');
+      } else {
+        logger.warn('OpenRouter API availability check failed', {
+          status: response.status,
+          statusText: response.statusText
+        });
+      }
+
+      return isAvailable;
     } catch (error) {
-      console.error('API availability check failed:', error);
+      timer(false);
+      logger.logErrorMetric({
+        error: error instanceof Error ? error : new Error(String(error)),
+        operation: 'OPENROUTER_AVAILABILITY_CHECK'
+      });
       return false;
     }
   }

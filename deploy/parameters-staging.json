@@ -1,0 +1,12 @@
+{
+  "Parameters": {
+    "Environment": "staging",
+    "OpenRouterApiKey": "REPLACE_WITH_YOUR_API_KEY",
+    "OpenRouterBaseUrl": "https://openrouter.ai/api/v1",
+    "FreeUserDailyLimit": 5,
+    "FreeUserModel": "openai/gpt-3.5-turbo",
+    "PremiumUserModel": "openai/gpt-4",
+    "MaxContextTokens": 4000,
+    "ResponseTimeoutMs": 7000
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "askcliStatesVersion": "2020-03-31",
+  "profiles": {
+    "default": {
+      "skillId": "PLACEHOLDER_SKILL_ID",
+      "skillMetadata": {
+        "src": "./skill-package",
+        "eTag": "PLACEHOLDER_ETAG"
+      },
+      "code": {
+        "default": {
+          "src": "./dist"
+        }
+      },
+      "skillInfrastructure": {
+        "userConfig": {
+          "runtime": "nodejs18.x",
+          "handler": "index.handler",
+          "templateUrl": "https://ask-cli-static-content.s3-us-west-2.amazonaws.com/cfn-templates/skill-stack.yaml",
+          "awsRegion": "us-east-1"
+        },
+        "type": "@ask-cli/cfn-deployer"
+      }
+    }
+  }
+}

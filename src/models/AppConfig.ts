@@ -11,6 +11,9 @@ export interface AppConfig {
   premiumUserModel: string;
   maxContextTokens: number;
   responseTimeoutMs: number;
+  conversationContextTable: string;
+  subscriptionStatusTable: string;
+  analyticsTable: string;
 }
 
 /**
@@ -70,6 +73,9 @@ export class ConfigManager {
       premiumUserModel: this.getEnvVar('PREMIUM_USER_MODEL', DEFAULT_CONFIG.premiumUserModel!),
       maxContextTokens: this.getNumberEnvVar('MAX_CONTEXT_TOKENS', DEFAULT_CONFIG.maxContextTokens!),
       responseTimeoutMs: this.getNumberEnvVar('RESPONSE_TIMEOUT_MS', DEFAULT_CONFIG.responseTimeoutMs!),
+      conversationContextTable: this.getRequiredEnvVar('CONVERSATION_CONTEXT_TABLE'),
+      subscriptionStatusTable: this.getRequiredEnvVar('SUBSCRIPTION_STATUS_TABLE'),
+      analyticsTable: this.getRequiredEnvVar('ANALYTICS_TABLE'),
     };
 
     // Validate the configuration
